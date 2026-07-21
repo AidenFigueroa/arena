@@ -1,279 +1,216 @@
-AI Battle Simulator
+# AI Battle Simulator
 
-AI Battle Simulator is a browser-based application that uses OpenAI models to generate cinematic battles between fictional characters, custom fighters, or teams.
+**A full-stack generative AI application that creates cinematic battles, illustrated scenes, and single-elimination tournaments from user-defined fighters.**
 
-Users can define fighter names, mental abilities, physical abilities, and equipment, then simulate a narrated battle. The application also includes a tournament mode that places fighters into a bracket and advances winners through multiple rounds.
+AI Battle Simulator allows users to create fictional fighters or teams, describe their mental abilities, physical abilities, and equipment, and generate a narrated battle through the OpenAI API. The application converts the resulting narrative into sequential battle scenes, requests matching AI-generated images, and presents the experience through an interactive browser interface.
 
-Features
+A tournament mode extends the same generation pipeline into a bracket system that randomizes competitors, handles automatic byes, simulates individual matches, and advances winners through later rounds.
 
-Battle Simulator
+> **Status:** Functional prototype for local development and testing. The current version demonstrates the core AI and tournament workflows but requires stronger validation, structured model output, rate limiting, and automated testing before public deployment.
 
-Create two opposing teams
+## Project Highlights
 
-Add multiple fighters to either team
-
-Enter optional fighter details:
-
-Mental skills
-
-Physical skills
-
-Items or equipment
-
-Add optional avatar image URLs
-
-Generate a cinematic battle narrative
-
-Display the battle one step at a time
-
-Generate illustrated battle scenes
-
-Replay the generated battle summary
-
-Tournament Bracket
-
-Add custom fighters
-
-Store fighter names and abilities
-
-Randomize bracket placement
-
-Support automatic BYE advancement
-
-Simulate individual bracket matches
-
-Advance winners into later rounds
-
-Display summaries for completed matches
-
-Technology Stack
-
-Frontend
-
-HTML5
-
-CSS3
-
-Vanilla JavaScript
-
-Bootstrap 5
-
-Backend
-
-Node.js
-
-Express
-
-OpenAI Node.js SDK
-
-dotenv
-
-AI Services Used by the Current Code
-
-gpt-4o for battle narration
-
-dall-e-3 for generated battle images
-
-Project Structure
-
-ai-battle-sim/
-├── public/
-│   ├── index.html
-│   └── script.js
-├── server.js
-├── package.json
-├── .env
-├── .gitignore
-└── README.md
-
-File Descriptions
-
-File
-
-Purpose
-
-public/index.html
-
-Main user interface for battles and tournaments
-
-public/script.js
-
-Frontend form handling, battle display, fighter management, and bracket logic
-
-server.js
-
-Express server and OpenAI battle-generation endpoint
-
-package.json
-
-Project metadata, dependencies, and start script
-
-.env
-
-Stores the OpenAI API key locally
-
-.gitignore
-
-Prevents private or generated files from being committed
-
-README.md
-
-Project setup and usage documentation
-
-Requirements
-
-Before running the project, install:
-
-Node.js
-
-npm
-
-An OpenAI API key
-
-Check that Node.js and npm are available:
-
-node --version
-npm --version
-
-Installation
-
-1. Clone the Repository
-
-git clone <your-repository-url>
-cd ai-battle-sim
-
-Replace <your-repository-url> with the actual GitHub repository URL.
-
-2. Install Dependencies
-
-npm install
-
-The project currently uses:
-
-{
-  "dotenv": "^16.5.0",
-  "express": "^4.18.2",
-  "openai": "^4.100.0"
-}
-
-3. Create the Environment File
-
-Create a file named .env in the project root:
-
-OPENAI_API_KEY=your_openai_api_key_here
-
-Do not place quotes around the key unless the value itself requires them.
-
-4. Create a .gitignore
-
-node_modules/
-.env
-.DS_Store
-npm-debug.log*
-
-The .env file must not be pushed to GitHub because it contains the private API key.
-
-5. Start the Server
-
-npm start
-
-The current start command runs:
-
-node server.js
-
-Open the application at:
-
-http://localhost:3000
-
-How to Use
-
-Standard Battle
-
-Open the Battle Simulator tab.
-
-Click Add Fighter under Team 1.
-
-Enter at least the fighter's name.
-
-Optionally enter mental skills, physical skills, and equipment.
-
-Add one or more fighters to Team 2.
-
-Optionally add avatar image URLs.
-
-Click Simulate Battle.
-
-Wait for the generated narration and images.
-
-Use Replay Battle to display the saved battle again.
-
-At least one named fighter must exist on each team.
-
-Tournament Mode
-
-Open the Tournament Bracket tab.
-
-Enter a fighter name.
-
-Optionally enter mental skills, physical skills, and equipment.
-
-Click Add Fighter.
-
-Add at least two fighters.
-
-Click Generate Bracket.
-
-Simulate each available match.
-
-Winners automatically advance into the next round.
-
-When a fighter has no opponent, that fighter advances through a BYE.
-
-API
-
-Generate a Battle
-
+* Built a full-stack generative AI application with Node.js, Express, and vanilla JavaScript
+* Integrated text and image generation through the OpenAI Node.js SDK
+* Designed a prompt-building pipeline for custom fighters, teams, abilities, and equipment
+* Converted generated narration into sequential battle scenes
+* Generated up to five illustrated panels from selected narrative steps
+* Allowed narration to succeed even when individual image requests fail
+* Built a randomized single-elimination tournament bracket
+* Implemented automatic bye advancement and winner progression
+* Supported both team-battle and tournament-match request formats
+* Identified current reliability, security, cost, and scalability limitations
+* Documented a production-oriented refactoring plan
+
+## Why I Built It
+
+I built AI Battle Simulator to explore how a generative AI feature becomes a complete interactive application rather than a single API call.
+
+The main challenge was coordinating several stages of work:
+
+1. Collect structured fighter information from the browser
+2. Convert that information into a clear model prompt
+3. Request a cinematic battle narrative
+4. Break the narrative into displayable battle steps
+5. Select scenes that can be used as image prompts
+6. Request matching generated artwork
+7. Handle partial image-generation failures
+8. Return the available results to the frontend
+9. Reveal the battle progressively in the browser
+10. Reuse the generation workflow inside a tournament bracket
+
+This project gave me practical experience with API integration, prompt construction, asynchronous request handling, frontend state, tournament progression, and the reliability problems that appear when probabilistic model output controls application logic.
+
+## Core Features
+
+### Battle Simulator
+
+Users can:
+
+* Create two opposing teams
+* Add multiple fighters to either team
+* Enter fighter names, mental abilities, physical abilities, and equipment
+* Add optional avatar image URLs
+* Generate a cinematic battle narrative
+* View the battle one step at a time
+* Display generated illustrations for selected scenes
+* Replay the completed battle
+
+At least one named fighter must be submitted for each team.
+
+### Tournament Mode
+
+The tournament system supports:
+
+* Custom fighter creation
+* Fighter ability and equipment data
+* Randomized bracket placement
+* Automatic bye advancement
+* Individual match simulation
+* Winner advancement into later rounds
+* Match summaries for completed battles
+* Multi-round single-elimination progression
+
+## Technology Stack
+
+### Frontend
+
+* HTML5
+* CSS3
+* Vanilla JavaScript
+* Bootstrap 5
+
+### Backend
+
+* Node.js
+* Express
+* OpenAI Node.js SDK
+* dotenv
+
+### AI Services Used by the Current Implementation
+
+* `gpt-4o` for battle narration
+* `dall-e-3` for generated battle scenes
+
+## Application Architecture
+
+```text
+Browser Interface
+      |
+      | Fighter and team data
+      v
+POST /api/battle
+      |
+      v
+Express Backend
+      |
+      +--> Validate and normalize request data
+      +--> Format fighters into a battle prompt
+      +--> Request cinematic narration
+      +--> Split narration into battle steps
+      +--> Select up to five scene prompts
+      +--> Request generated images
+      +--> Filter failed image requests
+      |
+      v
+JSON Response
+      |
+      +--> Battle summary
+      +--> Successful image URLs
+      |
+      v
+Frontend Presentation
+      |
+      +--> Progressive narration reveal
+      +--> Generated comic panels
+      +--> Replay controls
+      +--> Tournament bracket updates
+```
+
+## AI Generation Pipeline
+
+When the backend receives a battle request, it:
+
+1. Reads the submitted fighter or team data
+2. Formats the data into a readable prompt
+3. Sends the prompt to the text-generation model
+4. Receives a complete battle narrative
+5. Splits the narrative into individual battle steps
+6. Pads the result when fewer than five steps are available
+7. Uses the first five selected steps as image prompts
+8. Requests one generated image for each selected scene
+9. Filters out unsuccessful image requests
+10. Returns the narration and successful images to the browser
+
+This design treats narration as the primary result. Image generation is optional enhancement data, so a failed image request does not have to discard an otherwise successful battle.
+
+## Frontend Experience
+
+The frontend:
+
+* Collects fighter data from dynamically managed forms
+* Sends battle requests to the Express API
+* Displays a loading state while generation is in progress
+* Stores the returned battle summary
+* Reveals narration steps with a delay
+* Displays optional fighter avatars
+* Appends generated battle panels
+* Supports replaying the saved battle
+* Creates and updates tournament bracket state
+* Advances winners into later rounds
+
+## API
+
+### Generate a Battle
+
+```http
 POST /api/battle
 Content-Type: application/json
+```
 
-The backend accepts two different request formats.
+The endpoint supports both team battles and tournament matches.
 
-Team Battle Request
+### Team Battle Request
 
+```json
 {
   "team1Fighters": [
     {
-      "name": "Goku",
-      "mental": "Combat instinct",
-      "physical": "Super strength and speed",
-      "item": "Power Pole"
+      "name": "Fighter One",
+      "mental": "Strategic planning",
+      "physical": "Enhanced speed and strength",
+      "item": "Energy staff"
     }
   ],
   "team2Fighters": [
     {
-      "name": "Superman",
-      "mental": "Experienced strategist",
-      "physical": "Flight, strength, and heat vision",
-      "item": "None"
+      "name": "Fighter Two",
+      "mental": "Experienced tactician",
+      "physical": "Flight and energy projection",
+      "item": "Shield"
     }
   ],
-  "team1Avatar": "https://example.com/team1.png",
-  "team2Avatar": "https://example.com/team2.png"
+  "team1Avatar": "https://example.com/team-one.png",
+  "team2Avatar": "https://example.com/team-two.png"
 }
+```
 
-Bracket Match Request
+### Tournament Match Request
 
+```json
 {
-  "team1": "Goku",
-  "team2": "Superman",
-  "team1Mental": "Combat instinct",
-  "team1Physical": "Super strength and speed",
-  "team2Mental": "Experienced strategist",
-  "team2Physical": "Flight, strength, and heat vision"
+  "team1": "Fighter One",
+  "team2": "Fighter Two",
+  "team1Mental": "Strategic planning",
+  "team1Physical": "Enhanced speed and strength",
+  "team2Mental": "Experienced tactician",
+  "team2Physical": "Flight and energy projection"
 }
+```
 
-Current Response Format
+### Current Response
 
+```json
 {
   "summary": "Generated battle narration...",
   "images": [
@@ -281,265 +218,191 @@ Current Response Format
     "https://generated-image-url.example/2"
   ]
 }
+```
 
-summary contains the complete generated battle narration.
+The `summary` contains the generated narration. The `images` array contains only the image requests that completed successfully.
 
-images contains any battle images that were generated successfully. Individual image failures are ignored so the narration can still be returned.
+## Project Structure
 
-Backend Flow
+```text
+ai-battle-sim/
+├── public/
+│   ├── index.html       # Battle and tournament interface
+│   └── script.js        # Forms, rendering, fighter state, and bracket logic
+├── server.js            # Express server and OpenAI generation workflow
+├── package.json         # Dependencies and start command
+├── .env                 # Local API configuration
+├── .gitignore           # Excluded secrets and generated files
+└── README.md
+```
 
-When /api/battle receives a request, the server:
+## Installation
 
-Reads the submitted fighters.
+### Prerequisites
 
-Converts fighter data into a readable prompt.
+* A recent Node.js release
+* npm
+* An OpenAI API key
 
-Requests a cinematic battle from OpenAI.
+Verify Node.js and npm:
 
-Splits the generated summary into battle steps.
+```bash
+node --version
+npm --version
+```
 
-Pads the result if fewer than five steps are found.
+### Clone the Repository
 
-Uses the first five steps as image prompts.
+```bash
+git clone <your-repository-url>
+cd ai-battle-sim
+```
 
-Requests one generated image per selected step.
+### Install Dependencies
 
-Filters out failed image requests.
+```bash
+npm install
+```
 
-Returns the narration and successful images to the browser.
+The current project dependencies include:
 
-Frontend Flow
-
-The frontend:
-
-Collects fighter information from the form.
-
-Sends the fighter data to /api/battle.
-
-Shows a loading spinner.
-
-Saves the returned narration.
-
-Reveals each narration step with a delay.
-
-Displays optional avatar images.
-
-Appends generated comic panels.
-
-Allows the narration to be replayed.
-
-Environment Variables
-
-Variable
-
-Required
-
-Description
-
-OPENAI_API_KEY
-
-Yes
-
-API key used by the OpenAI SDK
-
-PORT
-
-No
-
-Server port when supported by server.js
-
-The current server uses port 3000 directly. For hosting platforms, replace:
-
-const PORT = 3000;
-
-with:
-
-const PORT = process.env.PORT || 3000;
-
-Current Limitations
-
-This project is a functional prototype, but several areas need improvement before public deployment.
-
-API Cost
-
-Each standard battle can make:
-
-One text-generation request
-
-Up to five image-generation requests
-
-Repeated simulations can use API credits quickly. Add rate limiting, request limits, or an option to disable image generation before deploying publicly.
-
-Winner Detection
-
-Tournament winner detection currently guesses the winner by examining whether a fighter's name appears in the final generated sentence.
-
-This is unreliable because:
-
-Both fighter names may appear
-
-The narration may use pronouns
-
-The final sentence may not state the winner clearly
-
-Similar fighter names may produce false matches
-
-A stronger design would require the backend to return structured data:
-
+```json
 {
-  "winner": "Goku",
-  "loser": "Superman",
-  "summary": "..."
+  "dotenv": "^16.5.0",
+  "express": "^4.18.2",
+  "openai": "^4.100.0"
 }
+```
 
-Image Generation Response
+### Configure the Environment
 
-The server should always send a response, even when the image-generation block fails.
+Create a `.env` file in the project root:
 
-A safer structure is:
+```env
+OPENAI_API_KEY=your_openai_api_key_here
+```
 
-try {
-  imageResponses = await Promise.all(imageTasks);
-} catch (error) {
-  imageResponses = [];
+Do not commit this file or expose the API key in frontend JavaScript.
+
+Recommended `.gitignore` entries:
+
+```gitignore
+node_modules/
+.env
+.DS_Store
+npm-debug.log*
+```
+
+### Start the Application
+
+```bash
+npm start
+```
+
+The current start command runs:
+
+```bash
+node server.js
+```
+
+Open the application at:
+
+```text
+http://localhost:3000
+```
+
+## Engineering Challenges
+
+### Coordinating Text and Image Generation
+
+A standard battle can require one narration request followed by as many as five image requests. The backend must coordinate multiple asynchronous operations while preserving the narration when one or more images fail.
+
+### Turning Probabilistic Output Into Application State
+
+The current tournament logic attempts to identify the winner from the generated narration. Natural-language output is not a reliable application interface because both names may appear in the final sentence, pronouns may be used, or the result may be phrased unpredictably.
+
+A production version should require structured output such as:
+
+```json
+{
+  "winner": "Fighter One",
+  "loser": "Fighter Two",
+  "summary": "Generated battle narration..."
 }
+```
 
-return res.json({
-  summary,
-  images: imageResponses.filter(Boolean)
-});
+This would separate display content from tournament-control data.
 
-Replay Event Listener
+### Maintaining Bracket State
 
-The replay button listener is currently added inside the battle form submission handler. Submitting multiple battles can register multiple replay listeners.
+Tournament mode must track competitors across rounds, automatically advance fighters with no opponent, enable only valid matches, and insert winners into the correct future position.
 
-Register the listener once outside the submit handler:
+The current implementation works as a prototype but should use stable round and match identifiers rather than relying on fixed DOM element positions.
 
-document.getElementById("replayBtn").addEventListener("click", () => {
-  displayBattleSteps(savedSteps);
-});
+### Managing API Cost
 
-Tournament Equipment
+Each battle may trigger up to six paid generation requests: one for text and five for images. A public version would need:
 
-The tournament interface includes an equipment field, but the current bracket JavaScript does not store or send it.
+* Rate limiting
+* Per-user request limits
+* Duplicate-submission prevention
+* Configurable image counts
+* An image-generation toggle
+* Usage monitoring
+* Clear failure messages
 
-The fighter object should include:
+### Handling Untrusted Input
 
-bracketFighters.push({
-  name,
-  mental,
-  physical,
-  item
-});
+Fighter names and abilities are user-controlled data. They must be validated before reaching prompts or the DOM.
 
-Bracket Display Lookup
+A production version should:
 
-The current bracket result lookup assumes a fixed number of matches:
+* Limit input lengths
+* Validate required fields and data types
+* Avoid rendering raw input with `innerHTML`
+* Use `textContent` or safe DOM construction
+* Treat browser data as untrusted
+* Add server-side request validation
 
-document.querySelectorAll("#bracketDisplay .resultArea")[roundIdx * 2 + matchIdx]
+## Current Limitations
 
-This can select the wrong result area in larger tournaments.
+The current version is a functional prototype, not a production deployment.
 
-Use a unique data attribute instead:
+Known limitations include:
 
-<div
-  class="resultArea"
-  data-round="0"
-  data-match="0">
-</div>
+* Tournament winners are inferred from unstructured narration
+* Request data is not fully validated
+* API usage is not rate-limited
+* Image generation can consume credits quickly
+* User-controlled text may be inserted with `innerHTML`
+* The replay listener can be registered more than once
+* Tournament equipment is not consistently stored and submitted
+* Bracket result lookup assumes a fixed DOM layout
+* Duplicate battle submissions are not fully prevented
+* Error handling is not centralized
+* Automated tests have not been added
+* The server currently uses a fixed port value
 
-Then select it with:
+## Production Readiness Roadmap
 
-document.querySelector(
-  `.resultArea[data-round="${roundIdx}"][data-match="${matchIdx}"]`
-);
+The next engineering priorities are:
 
-HTML Injection
+1. Return structured winner and loser fields from the backend
+2. Validate and normalize every battle request
+3. Limit fighter names, abilities, and equipment fields
+4. Add rate limiting and request quotas
+5. Add an image-generation toggle and configurable image count
+6. Prevent duplicate submissions during generation
+7. Sanitize all user-controlled text
+8. Replace fixed bracket lookups with unique match identifiers
+9. Add centralized backend error handling
+10. Split narration and image generation into separate services
+11. Add automated API and bracket tests
+12. Support `process.env.PORT` for deployment platforms
 
-Fighter names and abilities are inserted with innerHTML.
+A possible future backend structure is:
 
-A user could enter HTML that is rendered by the page. Prefer textContent, DOM element creation, or escaping user input before inserting it into HTML.
-
-Prompt and Content Behavior
-
-The current server prompt requires every battle to end with one side dying. This is a project design choice, but it reduces flexibility and may make the application inappropriate for some audiences.
-
-A future version could include battle modes such as:
-
-Knockout
-
-Surrender
-
-First blood
-
-Non-lethal
-
-Death battle
-
-Team objective
-
-Environmental survival
-
-Recommended Improvements
-
-High Priority
-
-Return a structured winner from the backend.
-
-Validate all request data.
-
-Limit fighter name and ability lengths.
-
-Add image-generation controls.
-
-Add request rate limiting.
-
-Add centralized error handling.
-
-Prevent duplicate submissions while a battle is running.
-
-Sanitize user-controlled text.
-
-Move inline button handlers into script.js.
-
-Add automated tests.
-
-Feature Ideas
-
-Selectable battle environments
-
-Adjustable battle length
-
-Non-lethal and lethal modes
-
-Fighter stat sliders
-
-Saved fighters
-
-Saved battle history
-
-Downloadable tournament brackets
-
-Battle sound effects
-
-Animated health bars
-
-Team names
-
-Custom battle rules
-
-Structured scorecards
-
-Seeded tournament brackets
-
-Multiple AI narration styles
-
-Image generation toggle
-
-Single-elimination and double-elimination modes
-
-Suggested Future Project Structure
-
+```text
 ai-battle-sim/
 ├── public/
 │   ├── index.html
@@ -566,126 +429,56 @@ ai-battle-sim/
 ├── .env
 ├── .gitignore
 └── README.md
+```
 
-Troubleshooting
+## Potential Enhancements
 
-OPENAI_API_KEY Is Missing
+* Selectable battle environments
+* Adjustable battle length
+* Lethal and non-lethal battle modes
+* Fighter stat sliders
+* Saved fighters
+* Saved battle history
+* Downloadable tournament brackets
+* Animated health bars
+* Sound effects
+* Custom team names
+* Configurable battle rules
+* Structured scorecards
+* Seeded brackets
+* Multiple narration styles
+* Single- and double-elimination tournaments
 
-Confirm that:
+## Skills Demonstrated
 
-The .env file exists in the project root
+* Full-stack JavaScript development
+* Node.js and Express API development
+* OpenAI API integration
+* Prompt construction and data formatting
+* Text and image generation workflows
+* Asynchronous request coordination
+* Graceful handling of partial failures
+* REST endpoint design
+* Dynamic frontend forms
+* Browser state management
+* Tournament and bracket algorithms
+* DOM rendering and event handling
+* Environment-variable and secret management
+* API cost analysis
+* Input-validation and security analysis
+* Production-readiness planning
+* Technical documentation
 
-The variable is named exactly OPENAI_API_KEY
+## Current Status
 
-require("dotenv").config() runs before the OpenAI client is created
+AI Battle Simulator is a working prototype that demonstrates how generative text and image models can be integrated into an interactive full-stack application.
 
-The server was restarted after editing .env
+Its strongest engineering areas are the multi-stage AI generation pipeline, partial-failure handling, dynamic fighter management, and tournament progression. Future work is focused on replacing narration-based winner detection with structured model output, strengthening validation and security, controlling API usage, and separating the backend into testable services.
 
-The Browser Shows Failed to generate battle
+## License
 
-Check the terminal for the actual backend error.
+No license is currently specified.
 
-Common causes include:
-
-Missing API key
-
-Invalid API key
-
-Insufficient API credit
-
-Unsupported model access
-
-Network failure
-
-Invalid request data
-
-The server failing to return a response
-
-The Page Loads but the Battle Request Returns 404
-
-Confirm that:
-
-The server is running
-
-The page was opened through http://localhost:3000
-
-The frontend sends requests to /api/battle
-
-server.js defines app.post("/api/battle", ...)
-
-Do not open public/index.html directly with a file:/// URL because the API route is provided by Express.
-
-Tournament Match Shows an Error
-
-Confirm that:
-
-Both fighters are defined
-
-The request contains team1 and team2
-
-The backend supports the bracket request format
-
-The OpenAI request succeeded
-
-The response includes a non-empty summary
-
-Images Do Not Appear
-
-The narration may still succeed when one or more image requests fail.
-
-Check:
-
-Image-generation access
-
-API credit
-
-Image prompt validation
-
-Browser console errors
-
-Server warning messages
-
-Security Notes
-
-Never commit .env.
-
-Never expose the OpenAI API key in frontend JavaScript.
-
-Keep all OpenAI requests on the server.
-
-Add rate limiting before public deployment.
-
-Validate and limit all user input.
-
-Do not trust fighter data received from the browser.
-
-Avoid rendering raw user input through innerHTML.
-
-Git Setup
-
-Initialize the repository:
-
-git init
-git add .
-git commit -m "Initial commit"
-
-Connect it to GitHub:
-
-git branch -M main
-git remote add origin <your-repository-url>
-git push -u origin main
-
-When the remote repository already contains a README or another initial commit:
-
-git pull origin main --rebase
-git push -u origin main
-
-License
-
-No license was specified in the provided package.json.
-
-Add a license before distributing or accepting outside contributions.
-
-Author
+## Author
 
 Aiden Figueroa
