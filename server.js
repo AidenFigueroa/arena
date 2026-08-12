@@ -1,7 +1,19 @@
-require("dotenv").config();
-const express = require("express");
 const path = require("path");
+require("dotenv").config({ override: true });
+
+const express = require("express");
 const OpenAI = require("openai");
+
+const key = process.env.OPENAI_API_KEY;
+
+console.log("OpenAI key loaded:", key ? "YES" : "NO");
+console.log("Key length:", key?.length);
+console.log("Key starts:", key?.slice(0, 8));
+console.log("Key ends:", key?.slice(-4));
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY?.trim(),
+});
 
 const app = express();
 const PORT = 3000;
@@ -10,10 +22,7 @@ const PORT = 3000;
 app.use(express.static(path.join(__dirname, "public")));
 app.use(express.json());
 
-// Configure OpenAI
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+
 
 // Format team fighters into readable string for prompt
 function formatTeam(teamFighters) {
@@ -66,77 +75,149 @@ ${team2Formatted}
 Begin:
 `;
 
+try {
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are a brutal, unforgiving battle narrator. You MUST kill one side. Never end in peace.",
+      },
+      {
+        role: "user",
+        content: prompt
+      },
+    ],
+    max_tokens: 4500,
+    temperature: 0.9,
+  });
+
+  let summary =
+    completion.choices[0].message.content.trim();
+
+  // =============================
+  // IMAGE GENERATION STARTS HERE
+  // =============================
+
+  let steps = summary
+    .split(/(?<=\.)\s*\n+/)
+    .filter(Boolean);
+
+  while (steps.length < 5) {
+    steps.push(
+      "A tense moment between two fighters in a dramatic battleground."
+    );
+  }
+
+  steps = steps.slice(0, 5);
+
+  let imageResponses = [];
+
   try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a brutal, unforgiving battle narrator. You MUST kill one side. Never end in peace.",
-        },
-        { role: "user", content: prompt },
-      ],
-      max_tokens: 4500,
-      temperature: 0.9,
-    });
+    imageResponses = await Promise.all(
+      steps.map(async (text, index) => {
+        try {
+          const safeScene = text
+            .replace(/\bcorpse\b/gi, "fallen opponent")
+            .replace(/\blifeless body\b/gi, "defeated opponent")
+            .replace(/\bblood\b/gi, "")
+            .replace(/\bbloody\b/gi, "")
+            .replace(/\bbloodied\b/gi, "")
+            .replace(/\bgore\b/gi, "")
+            .replace(/\bkilled\b/gi, "defeated")
+            .replace(/\bkill\b/gi, "defeat")
+            .replace(/\bdeath\b/gi, "defeat")
+            .replace(/\bdied\b/gi, "fell")
+            .replace(/\bdies\b/gi, "falls")
+            .replace(/\bdecapitated\b/gi, "defeated")
+            .replace(/\bdismembered\b/gi, "defeated")
+            .trim();
 
-    let summary = completion.choices[0].message.content.trim();
+          const imagePrompt = `
+Cinematic illustrated battle scene.
 
-    // Extract steps and pad to 5 if needed
-    let steps = summary.split(/(?<=\.)\s*\n+/).filter(Boolean);
+Scene:
+${safeScene}
 
-    while (steps.length < 5) {
-      steps.push("A tense moment between two fighters in a dramatic battleground.");
-    }
+Style:
+dramatic comic-book illustration,
+cinematic lighting,
+dynamic action poses,
+intense expressions,
+dramatic camera angle,
+detailed environment,
+high energy,
+non-graphic fantasy combat,
+no gore,
+no visible severe injuries,
+no text,
+no captions.
+          `.trim();
 
-    steps = steps.slice(0, 5); // Only use first 5
+          console.log(
+            `🎯 Generating image ${index + 1}`
+          );
 
-    let imageResponses = [];
-
-    try {
-      imageResponses = await Promise.all(
-        steps.map(async (text, index) => {
-          try {
-            const rawPrompt = `Dramatic illustrated battle moment: ${text}, in cinematic lighting and action pose, intense expression, dynamic angle`;
-
-            const safePrompt = rawPrompt
-              .replace(/[^\w\s.,'’"!?-]/g, "")
-              .slice(0, 950);
-
-            console.log(`🎯 Prompt for image ${index + 1}:`, safePrompt);
-
-            const image = await openai.images.generate({
-              model: "dall-e-3",
-              prompt: safePrompt,
+          const image =
+            await openai.images.generate({
+              model: "gpt-image-2",
+              prompt: imagePrompt,
               size: "1024x1024",
+              quality: "low"
             });
 
-            const imageUrl = image.data[0]?.url;
-            console.log(`✅ Image ${index + 1} URL:`, imageUrl);
-            return imageUrl || null;
-          } catch (imgErr) {
-            console.warn(`⚠️ Image generation failed at step ${index + 1}:`, imgErr.message);
+          const base64Image =
+            image.data?.[0]?.b64_json;
+
+          if (!base64Image) {
             return null;
           }
-        }),
-      )
-            res.json({
+
+          return `data:image/png;base64,${base64Image}`;
+
+        } catch (imgErr) {
+          console.error(
+            `⚠️ Image ${index + 1} failed:`,
+            imgErr?.message || imgErr
+          );
+
+          return null;
+        }
+      })
+    );
+
+    imageResponses =
+      imageResponses.filter(Boolean);
+
+    return res.json({
       summary,
-      images: imageResponses.filter(Boolean),
-        });
-  
-  }catch (imgOuterErr) {
-      console.error("❌ Unexpected image generation error:", imgOuterErr.message || imgOuterErr);
-      imageResponses = [];
-    }
+      images: imageResponses
+    });
 
+  } catch (imgOuterErr) {
+    console.error(
+      "❌ Image generation error:",
+      imgOuterErr
+    );
 
-
-  } catch (err) {
-    console.error("❌ OpenAI Error:", err.message || err);
-    res.status(500).json({ summary: null, images: [] });
+    return res.json({
+      summary,
+      images: []
+    });
   }
+
+} catch (err) {
+
+  console.error("❌ OpenAI Error:");
+  console.error(err);
+
+  res.status(500).json({
+    summary: null,
+    images: [],
+    error: err.message || "Unknown server error"
+  });
+}
 });
 
 

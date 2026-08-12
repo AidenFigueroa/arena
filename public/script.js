@@ -108,10 +108,25 @@ try {
     })
   });
 
-  const data = await res.json();
-  console.log("📦 Full response from server:", data);
-  if (!data.summary) throw new Error("No summary returned.");
+const raw = await res.text();
 
+console.log("RAW SERVER RESPONSE:", raw);
+
+let data;
+
+try {
+  data = JSON.parse(raw);
+} catch {
+  throw new Error(`Server returned non-JSON response: ${raw}`);
+}
+
+if (!res.ok) {
+  throw new Error(data.error || `Server error: ${res.status}`);
+}
+
+if (!data.summary) {
+  throw new Error("Server returned no battle summary.");
+}
   // Show the avatars and battle text
   savedSteps = data.summary.trim().split(/(?<=\.)\s*\n+/);
   showAvatars(team1Avatar, team2Avatar);
@@ -142,8 +157,8 @@ try {
 
 
 } catch (err) {
-  alert("Failed to generate battle.");
-  console.error(err);
+  console.error("BATTLE ERROR:", err);
+  alert(`Failed to generate battle:\n${err.message}`);
 } finally {
   showLoading(false);
 }
