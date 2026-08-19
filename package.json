@@ -1,13 +1,13 @@
 {
-    "name": "ai-battle-sim",
-    "version": "1.0.0",
-    "main": "server.js",
-    "scripts": {
-        "start": "node server.js"
-    },
-    "dependencies": {
-        "dotenv": "^16.5.0",
-        "express": "^4.18.2",
-        "openai": "^4.100.0"
-    }
+  "name": "arena",
+  "version": "1.0.0",
+  "description": "AI Battle Simulator",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.5.0",
+    "express": "^4.18.2"
+  }
 }

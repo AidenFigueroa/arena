@@ -56,16 +56,642 @@ function showAvatars(url1, url2) {
   if (url1 || url2) document.getElementById("avatars").classList.remove("d-none");
 }
 
-function displayBattleSteps(steps) {
+
+// === Live AI Generation Progress ===
+let battleProgressSource = null;
+let battleProgressTimer = null;
+let battleProgressStartedAt = 0;
+
+function formatElapsed(ms) {
+  const totalSeconds =
+    Math.max(0, Math.floor(ms / 1000));
+
+  const minutes =
+    Math.floor(totalSeconds / 60);
+
+  const seconds =
+    totalSeconds % 60;
+
+  return minutes > 0
+    ? `${minutes}m ${String(seconds).padStart(2, "0")}s`
+    : `${seconds}s`;
+}
+
+function getOrCreateProgressPanel() {
+  let panel =
+    document.getElementById(
+      "generationProgress"
+    );
+
+  if (panel) {
+    return panel;
+  }
+
+  panel =
+    document.createElement("div");
+
+  panel.id =
+    "generationProgress";
+
+  panel.className =
+    "card bg-dark text-light border-secondary mt-4 d-none";
+
+  panel.innerHTML = `
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h5 class="mb-0 text-warning">AI Battle Generation</h5>
+        <span id="generationElapsed" class="small text-secondary">0s</span>
+      </div>
+
+      <div class="progress mb-3" style="height: 10px;">
+        <div
+          id="generationOverallBar"
+          class="progress-bar progress-bar-striped progress-bar-animated"
+          role="progressbar"
+          style="width: 2%;"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuenow="2"
+        ></div>
+      </div>
+
+      <div id="generationStage" class="mb-3">
+        Preparing battle...
+      </div>
+
+      <div class="row g-2 mb-3">
+        <div class="col-12 col-md-3">
+          <div id="storyProgressCard" class="border rounded p-2 h-100">
+            <div class="small text-secondary">Story</div>
+            <div class="progress-status">Waiting</div>
+          </div>
+        </div>
+
+        <div class="col-12 col-md-3">
+          <div id="panelProgressCard1" class="border rounded p-2 h-100">
+            <div class="small text-secondary">Panel 1</div>
+            <div class="progress-status">Waiting</div>
+          </div>
+        </div>
+
+        <div class="col-12 col-md-3">
+          <div id="panelProgressCard2" class="border rounded p-2 h-100">
+            <div class="small text-secondary">Panel 2</div>
+            <div class="progress-status">Waiting</div>
+          </div>
+        </div>
+
+        <div class="col-12 col-md-3">
+          <div id="panelProgressCard3" class="border rounded p-2 h-100">
+            <div class="small text-secondary">Panel 3</div>
+            <div class="progress-status">Waiting</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="border rounded bg-black p-2">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <span class="small text-secondary">Generation log</span>
+          <span id="generationPercent" class="small text-secondary">2%</span>
+        </div>
+
+        <pre
+          id="generationLog"
+          class="mb-0 text-light"
+          style="max-height: 260px; overflow-y: auto; white-space: pre-wrap; font-size: 0.8rem;"
+        ></pre>
+      </div>
+    </div>
+  `;
+
+  const battleForm =
+    document.getElementById(
+      "battleForm"
+    );
+
+  battleForm.insertAdjacentElement(
+    "afterend",
+    panel
+  );
+
+  return panel;
+}
+
+function setProgressBar(percent) {
+  const clamped =
+    Math.max(
+      2,
+      Math.min(100, Math.round(percent))
+    );
+
+  const bar =
+    document.getElementById(
+      "generationOverallBar"
+    );
+
+  const label =
+    document.getElementById(
+      "generationPercent"
+    );
+
+  if (bar) {
+    bar.style.width =
+      `${clamped}%`;
+
+    bar.setAttribute(
+      "aria-valuenow",
+      String(clamped)
+    );
+
+    if (clamped >= 100) {
+      bar.classList.remove(
+        "progress-bar-animated"
+      );
+    }
+  }
+
+  if (label) {
+    label.textContent =
+      `${clamped}%`;
+  }
+}
+
+function setProgressCard(
+  elementId,
+  text,
+  completed = false
+) {
+  const card =
+    document.getElementById(
+      elementId
+    );
+
+  if (!card) {
+    return;
+  }
+
+  const status =
+    card.querySelector(
+      ".progress-status"
+    );
+
+  if (status) {
+    status.textContent =
+      completed
+        ? `✓ ${text}`
+        : text;
+  }
+
+  if (completed) {
+    card.classList.add(
+      "border-success"
+    );
+  }
+}
+
+function addGenerationLog(
+  message,
+  level = "INFO",
+  elapsedMs = null
+) {
+  const log =
+    document.getElementById(
+      "generationLog"
+    );
+
+  if (!log) {
+    return;
+  }
+
+  const elapsed =
+    elapsedMs === null
+      ? Date.now() -
+        battleProgressStartedAt
+      : elapsedMs;
+
+  const timestamp =
+    formatElapsed(elapsed)
+      .padStart(7, " ");
+
+  log.textContent +=
+    `[${level}] ${timestamp}  ${message}\n`;
+
+  log.scrollTop =
+    log.scrollHeight;
+}
+
+function resetProgressPanel() {
+  const panel =
+    getOrCreateProgressPanel();
+
+  panel.classList.remove(
+    "d-none"
+  );
+
+  document.getElementById(
+    "generationStage"
+  ).textContent =
+    "Connecting to AI worker...";
+
+  document.getElementById(
+    "generationLog"
+  ).textContent = "";
+
+  for (const id of [
+    "storyProgressCard",
+    "panelProgressCard1",
+    "panelProgressCard2",
+    "panelProgressCard3"
+  ]) {
+    const card =
+      document.getElementById(id);
+
+    if (!card) continue;
+
+    card.classList.remove(
+      "border-success",
+      "border-danger"
+    );
+
+    const status =
+      card.querySelector(
+        ".progress-status"
+      );
+
+    if (status) {
+      status.textContent =
+        "Waiting";
+    }
+  }
+
+  const bar =
+    document.getElementById(
+      "generationOverallBar"
+    );
+
+  if (bar) {
+    bar.classList.add(
+      "progress-bar-animated"
+    );
+  }
+
+  setProgressBar(2);
+
+  battleProgressStartedAt =
+    Date.now();
+
+  if (battleProgressTimer) {
+    clearInterval(
+      battleProgressTimer
+    );
+  }
+
+  battleProgressTimer =
+    setInterval(() => {
+      const elapsed =
+        Date.now() -
+        battleProgressStartedAt;
+
+      const label =
+        document.getElementById(
+          "generationElapsed"
+        );
+
+      if (label) {
+        label.textContent =
+          formatElapsed(elapsed);
+      }
+    }, 500);
+
+  addGenerationLog(
+    "Opening live progress stream"
+  );
+}
+
+function finishProgressTimer() {
+  if (battleProgressTimer) {
+    clearInterval(
+      battleProgressTimer
+    );
+
+    battleProgressTimer = null;
+  }
+}
+
+function updateGenerationProgress(event) {
+  const stage =
+    document.getElementById(
+      "generationStage"
+    );
+
+  if (event.message && stage) {
+    stage.textContent =
+      event.message;
+  }
+
+  switch (event.type) {
+    case "connected":
+      addGenerationLog(
+        "Progress stream connected",
+        "INFO",
+        event.elapsedMs
+      );
+      break;
+
+    case "battle_start":
+      addGenerationLog(
+        "Battle request received",
+        "INFO",
+        event.elapsedMs
+      );
+      setProgressBar(4);
+      break;
+
+    case "story_start":
+      setProgressCard(
+        "storyProgressCard",
+        "Writing..."
+      );
+
+      addGenerationLog(
+        event.message ||
+          "Writing cinematic story",
+        "AI",
+        event.elapsedMs
+      );
+
+      setProgressBar(6);
+      break;
+
+    case "story_complete":
+      setProgressCard(
+        "storyProgressCard",
+        event.durationSeconds
+          ? `Complete · ${event.durationSeconds}s`
+          : "Complete",
+        true
+      );
+
+      addGenerationLog(
+        event.durationSeconds
+          ? `Story complete in ${event.durationSeconds}s`
+          : "Story complete",
+        "AI",
+        event.elapsedMs
+      );
+
+      setProgressBar(10);
+      break;
+
+    case "panel_start":
+      setProgressCard(
+        `panelProgressCard${event.panel}`,
+        "Preparing..."
+      );
+
+      addGenerationLog(
+        `Panel ${event.panel}/${event.totalPanels}: preparing FLUX workflow`,
+        "INFO",
+        event.elapsedMs
+      );
+      break;
+
+    case "comfy_connect":
+    case "panel_queued":
+    case "comfy_node":
+    case "download":
+    case "progress_warning":
+      setProgressCard(
+        `panelProgressCard${event.panel}`,
+        event.message
+      );
+
+      addGenerationLog(
+        event.message,
+        event.type === "progress_warning"
+          ? "WARN"
+          : "COMFY",
+        event.elapsedMs
+      );
+      break;
+
+    case "sampling": {
+      const panel =
+        Number(event.panel) || 1;
+
+      const panelProgress =
+        Number(event.percent) || 0;
+
+      const overall =
+        10 +
+        (panel - 1) * 30 +
+        (panelProgress / 100) * 30;
+
+      setProgressCard(
+        `panelProgressCard${panel}`,
+        `Sampling ${event.step}/${event.maxSteps} · ${event.percent}%`
+      );
+
+      addGenerationLog(
+        `Panel ${panel}: ${event.step}/${event.maxSteps} sampling steps (${event.percent}%)`,
+        "FLUX",
+        event.elapsedMs
+      );
+
+      setProgressBar(overall);
+      break;
+    }
+
+    case "panel_complete": {
+      const panel =
+        Number(event.panel) || 1;
+
+      setProgressCard(
+        `panelProgressCard${panel}`,
+        event.durationSeconds
+          ? `Complete · ${event.durationSeconds.toFixed(2)}s`
+          : "Complete",
+        true
+      );
+
+      addGenerationLog(
+        event.message,
+        "DONE",
+        event.elapsedMs
+      );
+
+      setProgressBar(
+        10 + panel * 30
+      );
+      break;
+    }
+
+    case "panel_retry":
+      addGenerationLog(
+        event.message,
+        "RETRY",
+        event.elapsedMs
+      );
+      break;
+
+    case "panel_attempt_failed":
+      addGenerationLog(
+        event.message,
+        "WARN",
+        event.elapsedMs
+      );
+      break;
+
+    case "done":
+      addGenerationLog(
+        "Battle generation complete",
+        "DONE",
+        event.elapsedMs
+      );
+
+      if (stage) {
+        stage.textContent =
+          "Battle generation complete";
+      }
+
+      setProgressBar(100);
+      finishProgressTimer();
+
+      if (battleProgressSource) {
+        battleProgressSource.close();
+        battleProgressSource = null;
+      }
+      break;
+
+    case "error":
+      addGenerationLog(
+        event.message ||
+          "Generation failed",
+        "ERROR",
+        event.elapsedMs
+      );
+
+      if (stage) {
+        stage.textContent =
+          event.message ||
+          "Generation failed";
+      }
+
+      finishProgressTimer();
+      break;
+  }
+}
+
+function openBattleProgressStream(
+  requestId
+) {
+  if (battleProgressSource) {
+    battleProgressSource.close();
+  }
+
+  resetProgressPanel();
+
+  battleProgressSource =
+    new EventSource(
+      `/api/battle-progress/${encodeURIComponent(requestId)}`
+    );
+
+  battleProgressSource.onmessage =
+    (event) => {
+      try {
+        const data =
+          JSON.parse(event.data);
+
+        updateGenerationProgress(
+          data
+        );
+      } catch (error) {
+        console.error(
+          "Invalid progress event:",
+          error
+        );
+      }
+    };
+
+  return new Promise((resolve) => {
+    let resolved = false;
+
+    const finish = () => {
+      if (resolved) return;
+      resolved = true;
+      resolve();
+    };
+
+    battleProgressSource.onopen =
+      finish;
+
+    setTimeout(
+      finish,
+      2000
+    );
+  });
+}
+
+function closeBattleProgressStream() {
+  if (battleProgressSource) {
+    battleProgressSource.close();
+    battleProgressSource = null;
+  }
+
+  finishProgressTimer();
+}
+
+// === Regular Battle Result Helpers ===
+function cleanSummaryText(summary) {
+  let text = String(summary || "").trim();
+
+  const suspiciousMarkers = [
+    "\nIMAGE PROMPT",
+    "\nIMAGE_PROMPTS",
+    "\n```json",
+    "\n{\"scene\"",
+    "\n[{\"scene\"",
+    "\n], [ {"
+  ];
+
+  let cutIndex = text.length;
+
+  for (const marker of suspiciousMarkers) {
+    const index = text.toLowerCase().indexOf(marker.toLowerCase());
+
+    if (index !== -1 && index < cutIndex) {
+      cutIndex = index;
+    }
+  }
+
+  return text.slice(0, cutIndex).trim();
+}
+
+function summaryToSteps(summary) {
+  return cleanSummaryText(summary)
+    .split(/\n\s*\n|\n/)
+    .map(step => step.trim())
+    .filter(Boolean);
+}
+
+function displayBattleSteps(steps, winner = "", title = "") {
   const result = document.getElementById("battleResult");
   const resultBox = document.getElementById("resultBox");
+
   result.innerHTML = "";
 
-  const lastLine = steps[steps.length - 1];
-  const match = lastLine.match(/(.*?) (defeats|destroys|wins|annihilates|overpowers|eliminates) (.*?)(\.|!|$)/i);
   const winnerHeader = document.createElement("h4");
   winnerHeader.className = "text-center text-warning mb-4";
-  winnerHeader.textContent = match ? `🔥 ${match[1]} ${match[2]} ${match[3]} 🔥` : "🔥 Epic Battle Results 🔥";
+
+  if (winner) {
+    winnerHeader.textContent =
+      `🔥 ${winner} wins${title ? ` — ${title}` : ""} 🔥`;
+  } else if (title) {
+    winnerHeader.textContent = `🔥 ${title} 🔥`;
+  } else {
+    winnerHeader.textContent = "🔥 Epic Battle Results 🔥";
+  }
+
   result.appendChild(winnerHeader);
 
   steps.forEach((text, i) => {
@@ -74,11 +700,70 @@ function displayBattleSteps(steps) {
       p.className = "step";
       p.textContent = text;
       result.appendChild(p);
+
       setTimeout(() => p.classList.add("show"), 10);
-    }, i * 1400);
+    }, i * 900);
   });
 
   resultBox.classList.remove("d-none");
+}
+
+function appendComicPanels(images) {
+  if (!Array.isArray(images) || images.length === 0) {
+    return;
+  }
+
+  const result = document.getElementById("battleResult");
+
+  const previousPanels =
+    result.querySelector(".battle-comic-panels");
+
+  if (previousPanels) {
+    previousPanels.remove();
+  }
+
+  const comicContainer =
+    document.createElement("div");
+
+  comicContainer.className =
+    "mt-4 battle-comic-panels";
+
+  const title =
+    document.createElement("h5");
+
+  title.textContent =
+    "🖼 Battle Comic Panels";
+
+  title.className =
+    "text-warning";
+
+  comicContainer.appendChild(title);
+
+  const row =
+    document.createElement("div");
+
+  row.className = "row g-3";
+
+  images.forEach((url, i) => {
+    const col =
+      document.createElement("div");
+
+    col.className = "col-12 col-md-4";
+
+    const img =
+      document.createElement("img");
+
+    img.src = url;
+    img.alt = `Battle comic panel ${i + 1}`;
+    img.className =
+      "img-fluid rounded border border-light w-100";
+
+    col.appendChild(img);
+    row.appendChild(col);
+  });
+
+  comicContainer.appendChild(row);
+  result.appendChild(comicContainer);
 }
 
 // === Regular Battle Submission ===
@@ -96,76 +781,88 @@ document.getElementById("battleForm").addEventListener("submit", async (e) => {
   }
 
   showLoading(true);
-try {
-  const res = await fetch("/api/battle", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      team1Fighters,
-      team2Fighters,
-      team1Avatar,
-      team2Avatar
-    })
-  });
 
-const raw = await res.text();
+  const requestId =
+    (
+      window.crypto &&
+      typeof window.crypto.randomUUID === "function"
+    )
+      ? window.crypto.randomUUID()
+      : `battle_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
-console.log("RAW SERVER RESPONSE:", raw);
+  await openBattleProgressStream(
+    requestId
+  );
 
-let data;
-
-try {
-  data = JSON.parse(raw);
-} catch {
-  throw new Error(`Server returned non-JSON response: ${raw}`);
-}
-
-if (!res.ok) {
-  throw new Error(data.error || `Server error: ${res.status}`);
-}
-
-if (!data.summary) {
-  throw new Error("Server returned no battle summary.");
-}
-  // Show the avatars and battle text
-  savedSteps = data.summary.trim().split(/(?<=\.)\s*\n+/);
-  showAvatars(team1Avatar, team2Avatar);
-  displayBattleSteps(savedSteps); // Must run before we append to battleResult
-
-  // Then show comic panels under the summary
- setTimeout(() => {
-  if (data.images && Array.isArray(data.images) && data.images.length > 0) {
-    const comicContainer = document.createElement("div");
-    comicContainer.className = "mt-4";
-
-    const title = document.createElement("h5");
-    title.textContent = "🖼 Battle Comic Panels";
-    title.className = "text-warning";
-    comicContainer.appendChild(title);
-
-    data.images.forEach((url, i) => {
-      const img = document.createElement("img");
-      img.src = url;
-      img.alt = `Scene ${i + 1}`;
-      img.className = "img-fluid rounded mb-3 border border-light";
-      comicContainer.appendChild(img);
+  try {
+    const res = await fetch("/api/battle", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId,
+        team1Fighters,
+        team2Fighters,
+        team1Avatar,
+        team2Avatar
+      })
     });
 
-    document.getElementById("battleResult").appendChild(comicContainer);
+    const raw = await res.text();
+    console.log("RAW SERVER RESPONSE:", raw);
+
+    let data;
+
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      throw new Error(`Server returned non-JSON response: ${raw}`);
+    }
+
+    if (!res.ok) {
+      throw new Error(data.error || `Server error: ${res.status}`);
+    }
+
+    if (!data.summary) {
+      throw new Error("Server returned no battle summary.");
+    }
+
+    savedSteps = summaryToSteps(data.summary);
+
+    showAvatars(team1Avatar, team2Avatar);
+
+    displayBattleSteps(
+      savedSteps,
+      data.winner || "",
+      data.title || ""
+    );
+
+    setTimeout(() => {
+      appendComicPanels(data.images || []);
+    }, savedSteps.length * 900);
+
+  } catch (err) {
+    console.error("BATTLE ERROR:", err);
+
+    updateGenerationProgress({
+      type: "error",
+      message: err.message,
+      elapsedMs:
+        Date.now() -
+        battleProgressStartedAt
+    });
+
+    closeBattleProgressStream();
+
+    alert(
+      `Failed to generate battle:\n${err.message}`
+    );
+  } finally {
+    showLoading(false);
   }
-}, savedSteps.length * 1400); // delay based on how many lines are shown
-
-
-} catch (err) {
-  console.error("BATTLE ERROR:", err);
-  alert(`Failed to generate battle:\n${err.message}`);
-} finally {
-  showLoading(false);
-}
+});
 
 document.getElementById("replayBtn").addEventListener("click", () => {
   displayBattleSteps(savedSteps);
-  })
 });
 
 

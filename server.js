@@ -1,227 +1,239 @@
-const path = require("path");
-require("dotenv").config({ override: true });
+require("dotenv").config();
 
 const express = require("express");
-const OpenAI = require("openai");
-
-const key = process.env.OPENAI_API_KEY;
-
-console.log("OpenAI key loaded:", key ? "YES" : "NO");
-console.log("Key length:", key?.length);
-console.log("Key starts:", key?.slice(0, 8));
-console.log("Key ends:", key?.slice(-4));
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY?.trim(),
-});
+const path = require("path");
+const http = require("http");
+const https = require("https");
 
 const app = express();
-const PORT = 3000;
 
-// Middleware
+const PORT = process.env.PORT || 3000;
+const AI_WORKER_URL = process.env.AI_WORKER_URL;
+const AI_WORKER_TOKEN = process.env.AI_WORKER_TOKEN;
+
+if (!AI_WORKER_URL) {
+  throw new Error("AI_WORKER_URL is missing from environment variables.");
+}
+
+if (!AI_WORKER_TOKEN) {
+  throw new Error("AI_WORKER_TOKEN is missing from environment variables.");
+}
+
 app.use(express.static(path.join(__dirname, "public")));
-app.use(express.json());
+app.use(express.json({ limit: "2mb" }));
 
+function postJson(urlString, headers, bodyObject) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(urlString);
+    const client = url.protocol === "https:" ? https : http;
+    const body = JSON.stringify(bodyObject);
 
+    const req = client.request(
+      url,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(body),
+          ...headers
+        },
+        timeout: 0
+      },
+      (response) => {
+        let raw = "";
 
-// Format team fighters into readable string for prompt
-function formatTeam(teamFighters) {
-  return teamFighters
-    .map((f) => `- ${f.name} (🧠 ${f.mental || "None"} | 💪 ${f.physical || "None"} | 🎒 ${f.item || "None"})`)
-    .join("\n");
+        response.setEncoding("utf8");
+
+        response.on("data", (chunk) => {
+          raw += chunk;
+        });
+
+        response.on("end", () => {
+          resolve({
+            statusCode: response.statusCode || 500,
+            raw
+          });
+        });
+      }
+    );
+
+    req.on("error", reject);
+
+    // Disable socket inactivity timeout for long local AI generations.
+    req.setTimeout(0);
+
+    req.write(body);
+    req.end();
+  });
 }
 
-// Battle simulation route
-app.post("/api/battle", async (req, res) => {
-  const {
-    team1Fighters,
-    team2Fighters,
-    team1Avatar,
-    team2Avatar,
-    team1,
-    team2,
-    team1Mental,
-    team1Physical,
-    team2Mental,
-    team2Physical
-  } = req.body;
 
-  let team1Formatted = "";
-  let team2Formatted = "";
+function getClientForUrl(url) {
+  return url.protocol === "https:"
+    ? https
+    : http;
+}
 
-  if (Array.isArray(team1Fighters) && Array.isArray(team2Fighters)) {
-    team1Formatted = formatTeam(team1Fighters);
-    team2Formatted = formatTeam(team2Fighters);
-  } else {
-    team1Formatted = `- ${team1} (🧠 ${team1Mental || "Unknown"} | 💪 ${team1Physical || "Unknown"})`;
-    team2Formatted = `- ${team2} (🧠 ${team2Mental || "Unknown"} | 💪 ${team2Physical || "Unknown"})`;
-  }
+app.get(
+  "/api/battle-progress/:requestId",
+  (req, res) => {
+    const requestId = req.params.requestId;
 
-  const prompt = `
-You are a legendary battle narrator AI. Write a long, cinematic, strategic, and round-by-round battle between two fighters or teams.
+    if (!/^[A-Za-z0-9_-]{8,128}$/.test(requestId)) {
+      return res.status(400).json({
+        error: "Invalid progress request ID."
+      });
+    }
 
-Each fighter has unique mental, physical, and item-based abilities. Incorporate their gear, tactics, and personality.
-
-Each fight must end in death — no ties, no peace. One side must fall dramatically.
-
-Use vivid action, environmental detail, and creative attack/counter moves.
-
-Team 1:
-${team1Formatted}
-
-Team 2:
-${team2Formatted}
-
-Begin:
-`;
-
-try {
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4o",
-    messages: [
-      {
-        role: "system",
-        content:
-          "You are a brutal, unforgiving battle narrator. You MUST kill one side. Never end in peace.",
-      },
-      {
-        role: "user",
-        content: prompt
-      },
-    ],
-    max_tokens: 4500,
-    temperature: 0.9,
-  });
-
-  let summary =
-    completion.choices[0].message.content.trim();
-
-  // =============================
-  // IMAGE GENERATION STARTS HERE
-  // =============================
-
-  let steps = summary
-    .split(/(?<=\.)\s*\n+/)
-    .filter(Boolean);
-
-  while (steps.length < 5) {
-    steps.push(
-      "A tense moment between two fighters in a dramatic battleground."
+    const workerUrl = new URL(
+      `${AI_WORKER_URL.replace(/\/$/, "")}/progress/${encodeURIComponent(requestId)}`
     );
-  }
 
-  steps = steps.slice(0, 5);
+    const client =
+      getClientForUrl(workerUrl);
 
-  let imageResponses = [];
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      "Connection": "keep-alive",
+      "X-Accel-Buffering": "no"
+    });
 
-  try {
-    imageResponses = await Promise.all(
-      steps.map(async (text, index) => {
-        try {
-          const safeScene = text
-            .replace(/\bcorpse\b/gi, "fallen opponent")
-            .replace(/\blifeless body\b/gi, "defeated opponent")
-            .replace(/\bblood\b/gi, "")
-            .replace(/\bbloody\b/gi, "")
-            .replace(/\bbloodied\b/gi, "")
-            .replace(/\bgore\b/gi, "")
-            .replace(/\bkilled\b/gi, "defeated")
-            .replace(/\bkill\b/gi, "defeat")
-            .replace(/\bdeath\b/gi, "defeat")
-            .replace(/\bdied\b/gi, "fell")
-            .replace(/\bdies\b/gi, "falls")
-            .replace(/\bdecapitated\b/gi, "defeated")
-            .replace(/\bdismembered\b/gi, "defeated")
-            .trim();
-
-          const imagePrompt = `
-Cinematic illustrated battle scene.
-
-Scene:
-${safeScene}
-
-Style:
-dramatic comic-book illustration,
-cinematic lighting,
-dynamic action poses,
-intense expressions,
-dramatic camera angle,
-detailed environment,
-high energy,
-non-graphic fantasy combat,
-no gore,
-no visible severe injuries,
-no text,
-no captions.
-          `.trim();
-
-          console.log(
-            `🎯 Generating image ${index + 1}`
-          );
-
-          const image =
-            await openai.images.generate({
-              model: "gpt-image-2",
-              prompt: imagePrompt,
-              size: "1024x1024",
-              quality: "low"
-            });
-
-          const base64Image =
-            image.data?.[0]?.b64_json;
-
-          if (!base64Image) {
-            return null;
-          }
-
-          return `data:image/png;base64,${base64Image}`;
-
-        } catch (imgErr) {
-          console.error(
-            `⚠️ Image ${index + 1} failed:`,
-            imgErr?.message || imgErr
-          );
-
-          return null;
+    const upstream = client.request(
+      workerUrl,
+      {
+        method: "GET",
+        headers: {
+          Authorization:
+            `Bearer ${AI_WORKER_TOKEN}`,
+          Accept: "text/event-stream"
         }
-      })
+      },
+      (workerResponse) => {
+        if (
+          !workerResponse.statusCode ||
+          workerResponse.statusCode < 200 ||
+          workerResponse.statusCode >= 300
+        ) {
+          res.write(
+            `data: ${JSON.stringify({
+              type: "error",
+              message:
+                `Progress worker returned status ${workerResponse.statusCode || 500}`
+            })}\n\n`
+          );
+
+          res.end();
+          return;
+        }
+
+        workerResponse.on(
+          "data",
+          (chunk) => {
+            res.write(chunk);
+          }
+        );
+
+        workerResponse.on(
+          "end",
+          () => {
+            res.end();
+          }
+        );
+      }
     );
 
-    imageResponses =
-      imageResponses.filter(Boolean);
+    upstream.on("error", (error) => {
+      try {
+        res.write(
+          `data: ${JSON.stringify({
+            type: "error",
+            message:
+              `Progress stream error: ${error.message}`
+          })}\n\n`
+        );
+      } catch {}
 
-    return res.json({
-      summary,
-      images: imageResponses
+      try {
+        res.end();
+      } catch {}
     });
 
-  } catch (imgOuterErr) {
-    console.error(
-      "❌ Image generation error:",
-      imgOuterErr
-    );
+    upstream.setTimeout(0);
+    upstream.end();
 
-    return res.json({
-      summary,
-      images: []
+    req.on("close", () => {
+      upstream.destroy();
     });
   }
+);
 
-} catch (err) {
+app.post("/api/battle", async (req, res) => {
+  try {
+    const workerUrl =
+      `${AI_WORKER_URL.replace(/\/$/, "")}/battle`;
 
-  console.error("❌ OpenAI Error:");
-  console.error(err);
+    console.log("Sending battle request to AI worker...");
 
-  res.status(500).json({
-    summary: null,
-    images: [],
-    error: err.message || "Unknown server error"
-  });
-}
+    const workerResponse = await postJson(
+      workerUrl,
+      {
+        Authorization: `Bearer ${AI_WORKER_TOKEN}`
+      },
+      req.body
+    );
+
+    let data;
+
+    try {
+      data = JSON.parse(workerResponse.raw);
+    } catch {
+      throw new Error(
+        `AI worker returned invalid JSON: ${workerResponse.raw}`
+      );
+    }
+
+    if (
+      workerResponse.statusCode < 200 ||
+      workerResponse.statusCode >= 300
+    ) {
+      console.error("AI worker error:", data);
+
+      return res.status(workerResponse.statusCode).json({
+        title: null,
+        summary: null,
+        winner: null,
+        images: [],
+        error:
+          data.error ||
+          `AI worker returned status ${workerResponse.statusCode}`
+      });
+    }
+
+    console.log(
+      `Battle generated with ${data.images?.length || 0} images`
+    );
+
+    return res.json({
+      title: data.title || null,
+      summary: data.summary,
+      winner: data.winner || null,
+      images: Array.isArray(data.images) ? data.images : []
+    });
+  } catch (err) {
+    console.error("Battle generation failed:");
+    console.error(err);
+
+    return res.status(500).json({
+      title: null,
+      summary: null,
+      winner: null,
+      images: [],
+      error: err.message || "Battle generation failed."
+    });
+  }
 });
 
-
-
 app.listen(PORT, () => {
-  console.log(`🚀 Server running at http://localhost:${PORT}`);
+  console.log(`Arena server running at http://localhost:${PORT}`);
 });

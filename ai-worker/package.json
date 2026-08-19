@@ -1,0 +1,13 @@
+{
+  "name": "arena-ai-worker",
+  "version": "1.0.0",
+  "description": "AI worker for Arena using Ollama and ComfyUI",
+  "main": "worker.js",
+  "scripts": {
+    "start": "node worker.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.5.0",
+    "express": "^4.18.2"
+  }
+}
