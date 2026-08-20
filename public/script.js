@@ -767,8 +767,36 @@ function appendComicPanels(images) {
 }
 
 // === Regular Battle Submission ===
+let battleRequestInProgress = false;
+
 document.getElementById("battleForm").addEventListener("submit", async (e) => {
   e.preventDefault();
+
+  if (battleRequestInProgress) {
+    console.warn(
+      "Battle request ignored because another battle is already generating."
+    );
+    return;
+  }
+
+  battleRequestInProgress = true;
+
+  const submitButton =
+    e.currentTarget.querySelector(
+      'button[type="submit"], input[type="submit"]'
+    );
+
+  if (submitButton) {
+    submitButton.disabled = true;
+
+    if (submitButton.tagName === "BUTTON") {
+      submitButton.dataset.originalText =
+        submitButton.textContent;
+
+      submitButton.textContent =
+        "Generating Battle...";
+    }
+  }
 
   const team1Fighters = getFightersFrom("team1Inputs");
   const team2Fighters = getFightersFrom("team2Inputs");
@@ -776,6 +804,20 @@ document.getElementById("battleForm").addEventListener("submit", async (e) => {
   const team2Avatar = document.getElementById("team2Avatar").value.trim();
 
   if (team1Fighters.length === 0 || team2Fighters.length === 0) {
+    battleRequestInProgress = false;
+
+    if (submitButton) {
+      submitButton.disabled = false;
+
+      if (
+        submitButton.tagName === "BUTTON" &&
+        submitButton.dataset.originalText
+      ) {
+        submitButton.textContent =
+          submitButton.dataset.originalText;
+      }
+    }
+
     alert("Please enter at least one fighter per team.");
     return;
   }
@@ -857,6 +899,20 @@ document.getElementById("battleForm").addEventListener("submit", async (e) => {
       `Failed to generate battle:\n${err.message}`
     );
   } finally {
+    battleRequestInProgress = false;
+
+    if (submitButton) {
+      submitButton.disabled = false;
+
+      if (
+        submitButton.tagName === "BUTTON" &&
+        submitButton.dataset.originalText
+      ) {
+        submitButton.textContent =
+          submitButton.dataset.originalText;
+      }
+    }
+
     showLoading(false);
   }
 });

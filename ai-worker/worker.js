@@ -908,10 +908,9 @@ Include:
 - exact action occurring at that instant
 
 
-RETURN ONLY THE REQUIRED STRUCTURED JSON.
+The battle will be generated in separate planning and story-writing stages.
 
-Do not include notes, commentary, markdown,
-or explanations outside the JSON.
+Follow the output instructions given for the current stage.
 `.trim();
 }
 
@@ -919,19 +918,139 @@ or explanations outside the JSON.
 // OLLAMA
 // ========================================
 
-async function generateBattle(prompt, requestId) {
-  const storyStartedAt = Date.now();
+function cleanJsonText(value) {
+  let text = String(value || "").trim();
 
-  emitProgress(requestId, {
-    type: "story_start",
-    stage: "story",
-    message: `Writing cinematic battle with ${OLLAMA_MODEL}`
-  });
+  if (text.startsWith("```")) {
+    text = text
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/i, "")
+      .trim();
+  }
 
-  console.log(
-    `Generating battle with ${OLLAMA_MODEL}...`
+  const firstBrace = text.indexOf("{");
+  const lastBrace = text.lastIndexOf("}");
+
+  if (
+    firstBrace !== -1 &&
+    lastBrace > firstBrace
+  ) {
+    text = text.slice(
+      firstBrace,
+      lastBrace + 1
+    );
+  }
+
+  return text;
+}
+
+async function requestOllamaJson(
+  prompt,
+  {
+    temperature = 0.25,
+    numCtx = 12288,
+    numPredict = 1800,
+    attempts = 2
+  } = {}
+) {
+  let lastError = null;
+
+  for (
+    let attempt = 1;
+    attempt <= attempts;
+    attempt++
+  ) {
+    const response = await fetch(
+      `${OLLAMA_URL}/api/generate`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: OLLAMA_MODEL,
+          prompt,
+          format: "json",
+          stream: false,
+          options: {
+            temperature,
+            num_ctx: numCtx,
+            num_predict: numPredict
+          }
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const errorText =
+        await response.text();
+
+      throw new Error(
+        `Ollama error ${response.status}: ${errorText}`
+      );
+    }
+
+    const data =
+      await response.json();
+
+    const raw =
+      String(data.response || "");
+
+    if (!raw.trim()) {
+      lastError =
+        new Error(
+          "Ollama returned an empty JSON response."
+        );
+
+      continue;
+    }
+
+    const cleaned =
+      cleanJsonText(raw);
+
+    try {
+      return JSON.parse(cleaned);
+    } catch (error) {
+      lastError = error;
+
+      console.error(
+        `Ollama JSON parse failed on attempt ${attempt}/${attempts}.`
+      );
+
+      console.error(
+        "Ollama done reason:",
+        data.done_reason || "unknown"
+      );
+
+      console.error(
+        "Ollama response characters:",
+        raw.length
+      );
+
+      console.error(
+        "Ollama response tail:",
+        raw.slice(-1500)
+      );
+    }
+  }
+
+  throw new Error(
+    `Ollama returned invalid battle-plan JSON${
+      lastError?.message
+        ? `: ${lastError.message}`
+        : "."
+    }`
   );
+}
 
+async function requestOllamaText(
+  prompt,
+  {
+    temperature = 0.5,
+    numCtx = 16384,
+    numPredict = 3000
+  } = {}
+) {
   const response = await fetch(
     `${OLLAMA_URL}/api/generate`,
     {
@@ -941,49 +1060,12 @@ async function generateBattle(prompt, requestId) {
       },
       body: JSON.stringify({
         model: OLLAMA_MODEL,
-        prompt: `
-${prompt}
-
-IMPORTANT JSON OUTPUT FORMAT:
-
-Return exactly one JSON object with this shape:
-
-{
-  "title": "short battle title",
-  "winner": "name of the winning fighter",
-  "story": "the complete 700 to 1000 word cinematic prose story",
-  "image_prompts": [
-    {
-      "scene": "opening panel scene",
-      "left_character": "left fighter description and action",
-      "right_character": "right fighter description and action"
-    },
-    {
-      "scene": "middle panel scene",
-      "left_character": "left fighter description and action",
-      "right_character": "right fighter description and action"
-    },
-    {
-      "scene": "finishing panel scene",
-      "left_character": "left fighter description and action",
-      "right_character": "right fighter description and action"
-    }
-  ]
-}
-
-Do not add any keys other than:
-title, winner, story, image_prompts.
-
-Each image_prompts object must contain only:
-scene, left_character, right_character.
-
-Return JSON only.
-Do not wrap the JSON in markdown.
-        `.trim(),
-        format: "json",
+        prompt,
         stream: false,
         options: {
-          temperature: 0.4
+          temperature,
+          num_ctx: numCtx,
+          num_predict: numPredict
         }
       })
     }
@@ -1001,68 +1083,76 @@ Do not wrap the JSON in markdown.
   const data =
     await response.json();
 
-  if (!data.response) {
+  const story =
+    String(data.response || "").trim();
+
+  if (!story) {
     throw new Error(
-      "Ollama returned no battle."
+      "Ollama returned an empty battle story."
     );
   }
 
-  let battle;
+  console.log(
+    "Story generation done reason:",
+    data.done_reason || "unknown"
+  );
 
-  try {
-    battle =
-      JSON.parse(data.response);
-  } catch {
-    console.error(
-      "Invalid Ollama JSON:",
-      data.response
-    );
+  return story
+    .replace(/^```(?:text|markdown)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+}
 
+function validateBattlePlan(plan) {
+  if (
+    !plan ||
+    typeof plan !== "object"
+  ) {
     throw new Error(
-      "Ollama returned invalid battle JSON."
+      "Battle plan was not a JSON object."
     );
   }
 
   if (
-    typeof battle.title !== "string" ||
-    battle.title.trim().length === 0
+    typeof plan.title !== "string" ||
+    !plan.title.trim()
   ) {
     throw new Error(
-      "Battle JSON did not contain a valid title."
+      "Battle plan did not contain a valid title."
     );
   }
 
   if (
-    typeof battle.winner !== "string" ||
-    battle.winner.trim().length === 0
+    typeof plan.winner !== "string" ||
+    !plan.winner.trim()
   ) {
     throw new Error(
-      "Battle JSON did not contain a valid winner."
+      "Battle plan did not contain a valid winner."
     );
   }
 
   if (
-    typeof battle.story !== "string" ||
-    battle.story.trim().length === 0
+    !Array.isArray(plan.story_plan) ||
+    plan.story_plan.length < 6
   ) {
     throw new Error(
-      "Battle JSON did not contain a valid story."
+      "Battle plan did not contain enough story-planning steps."
     );
   }
 
   if (
     !Array.isArray(
-      battle.image_prompts
+      plan.image_prompts
     ) ||
-    battle.image_prompts.length !==
+    plan.image_prompts.length !==
       IMAGE_COUNT
   ) {
     throw new Error(
       `Expected ${IMAGE_COUNT} image prompts but received ${
         Array.isArray(
-          battle.image_prompts
+          plan.image_prompts
         )
-          ? battle.image_prompts.length
+          ? plan.image_prompts.length
           : "invalid data"
       }.`
     );
@@ -1070,11 +1160,11 @@ Do not wrap the JSON in markdown.
 
   for (
     let i = 0;
-    i < battle.image_prompts.length;
+    i < plan.image_prompts.length;
     i++
   ) {
     const panel =
-      battle.image_prompts[i];
+      plan.image_prompts[i];
 
     if (
       !panel ||
@@ -1088,17 +1178,189 @@ Do not wrap the JSON in markdown.
       );
     }
   }
+}
 
-  battle.summary =
-    battle.story.trim();
+async function generateBattle(
+  prompt,
+  requestId
+) {
+  const storyStartedAt =
+    Date.now();
+
+  emitProgress(requestId, {
+    type: "story_start",
+    stage: "story",
+    message:
+      `Planning cinematic battle with ${OLLAMA_MODEL}`
+  });
+
+  console.log(
+    `Planning battle with ${OLLAMA_MODEL}...`
+  );
+
+  const planningPrompt = `
+${prompt}
+
+CURRENT STAGE: BATTLE PLANNING
+
+Do NOT write the full prose story yet.
+
+Decide:
+- a short cinematic title
+- one clear winner
+- a 7-step chronological story plan
+- exactly ${IMAGE_COUNT} comic-panel prompts
+
+The story plan must make the victory feel earned.
+Both fighters must remain competent.
+Include escalation, adaptation, at least one reversal,
+a decisive climax, and aftermath.
+
+Return ONLY one JSON object in exactly this shape:
+
+{
+  "title": "short cinematic battle title",
+  "winner": "winning fighter name",
+  "story_plan": [
+    "setup and tension",
+    "first meaningful exchange",
+    "escalation",
+    "first tactical adaptation",
+    "major reversal",
+    "decisive climax",
+    "aftermath"
+  ],
+  "image_prompts": [
+    {
+      "scene": "opening cinematic panel scene",
+      "left_character": "left fighter appearance, pose, and action",
+      "right_character": "right fighter appearance, pose, and action"
+    },
+    {
+      "scene": "middle cinematic clash scene",
+      "left_character": "left fighter appearance, pose, and action",
+      "right_character": "right fighter appearance, pose, and action"
+    },
+    {
+      "scene": "decisive finishing scene",
+      "left_character": "left fighter appearance, pose, and action",
+      "right_character": "right fighter appearance, pose, and action"
+    }
+  ]
+}
+
+Do not use markdown.
+Do not add any keys.
+`.trim();
+
+  const plan =
+    await requestOllamaJson(
+      planningPrompt,
+      {
+        temperature: 0.25,
+        numCtx: 12288,
+        numPredict: 1800,
+        attempts: 2
+      }
+    );
+
+  validateBattlePlan(plan);
+
+  emitProgress(requestId, {
+    type: "story_progress",
+    stage: "story",
+    message:
+      "Battle plan complete. Writing cinematic prose..."
+  });
+
+  console.log(
+    "Battle plan complete. Writing full story..."
+  );
+
+  const storyPlanText =
+    plan.story_plan
+      .map(
+        (step, index) =>
+          `${index + 1}. ${String(step).trim()}`
+      )
+      .join("\n");
+
+  const storyPrompt = `
+Write the complete cinematic battle story described below.
+
+BATTLE TITLE:
+${plan.title}
+
+REQUIRED WINNER:
+${plan.winner}
+
+STORY PLAN:
+${storyPlanText}
+
+SOURCE RULES AND CHARACTER INFORMATION:
+${prompt}
+
+CURRENT STAGE: STORY WRITING
+
+Output ONLY the finished prose story.
+
+Do NOT output JSON.
+Do NOT output image prompts.
+Do NOT output the title as a heading.
+Do NOT use headings, numbered sections, bullet points,
+"Act 1", "Opening Shot", or screenplay formatting.
+
+Write approximately 700 to 1000 words in 7 to 10 substantial paragraphs.
+
+This must read like an actual cinematic action story,
+not a synopsis of events.
+
+Show actions in physical detail instead of saying that
+someone "used tactics", "used agility", or "pressed an advantage."
+
+Both fighters must behave intelligently and competently.
+
+The required winner is ${plan.winner}, but the victory must
+be earned through the story plan above. Do not make the loser
+randomly stupid, clumsy, or helpless.
+
+Use atmosphere, spatial continuity, physical consequences,
+adaptation, reversal, a sustained climax, and a short cinematic aftermath.
+
+The final story must agree with the story plan and the required winner.
+`.trim();
+
+  const story =
+    await requestOllamaText(
+      storyPrompt,
+      {
+        temperature: 0.5,
+        numCtx: 16384,
+        numPredict: 3000
+      }
+    );
+
+  const battle = {
+    title: plan.title.trim(),
+    winner: plan.winner.trim(),
+    story,
+    summary: story,
+    image_prompts:
+      plan.image_prompts
+  };
 
   emitProgress(requestId, {
     type: "story_complete",
     stage: "story",
-    message: "Cinematic battle story complete",
+    message:
+      "Cinematic battle story complete",
     durationSeconds:
       Math.round(
-        ((Date.now() - storyStartedAt) / 1000) * 10
+        (
+          (Date.now() -
+            storyStartedAt) /
+          1000
+        ) * 10
       ) / 10
   });
 
